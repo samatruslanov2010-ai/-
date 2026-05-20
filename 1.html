@@ -26,7 +26,6 @@
             overflow: hidden;
         }
 
-        /* Адаптивность для мобильных устройств */
         @media (max-width: 768px) {
             body { flex-direction: column; }
             #controls { 
@@ -154,38 +153,39 @@
 
     <div class="group">
         <div class="group-title">Визуал</div>
+        <label><input type="checkbox" id="rainbowMode" checked> Эффект Радуги</label>
         <input type="color" id="particleColor" value="#00f2ff">
-        <label><input type="checkbox" id="rainbowMode"> Радуга</label>
     </div>
 
     <div class="group">
-        <div class="group-title">Форма Появления</div>
+        <div class="group-title">Геометрия</div>
         <select id="sPattern">
-            <option value="circle_solid">Плотный Круг</option>
-            <option value="square_outline">Контур Квадрата</option>
-            <option value="plus_solid">Плотный Плюс</option>
+            <option value="circle_solid">Круг</option>
+            <option value="square_outline">Квадрат</option>
+            <option value="plus_solid">Плюс</option>
         </select>
     </div>
 
     <div class="group">
         <div class="group-title">Параметры</div>
-        <label>Размер пикселя <span class="val" id="val-pSize">5</span></label>
-        <input type="range" id="pSize" min="1" max="15" value="5">
-        
-        <label>Масштаб фигуры <span class="val" id="val-spawnScale">30</span></label>
-        <input type="range" id="spawnScale" min="5" max="150" value="30">
-        
-        <label>Детализация <span class="val" id="val-spawnDensity">5</span></label>
-        <input type="range" id="spawnDensity" min="1" max="20" value="5">
-        
-        <label>Длина шлейфа <span class="val" id="val-trailAlpha">0.15</span></label>
-        <input type="range" id="trailAlpha" min="0.01" max="0.5" step="0.01" value="0.15">
-        
-        <label>Скорость разлета <span class="val" id="val-speed">0.5</span></label>
-        <input type="range" id="speed" min="0" max="4" step="0.1" value="0.5">
+        <label>Длина шлейфа <span class="val" id="val-trailAlpha">0.05</span></label>
+        <input type="range" id="trailAlpha" min="0.01" max="0.5" step="0.01" value="0.05">
 
-        <label>Время жизни <span class="val" id="val-lifeSpan">50</span></label>
-        <input type="range" id="lifeSpan" min="1" max="100" step="1" value="50">
+        <!-- Увеличен максимум max до 15 и начальное значение до 3.5 -->
+        <label>Скорость <span class="val" id="val-speed">3.5</span></label>
+        <input type="range" id="speed" min="0" max="15" step="0.1" value="3.5">
+
+        <label>Размер пикселя <span class="val" id="val-pSize">4</span></label>
+        <input type="range" id="pSize" min="1" max="15" value="4">
+        
+        <label>Масштаб <span class="val" id="val-spawnScale">45</span></label>
+        <input type="range" id="spawnScale" min="5" max="150" value="45">
+        
+        <label>Детализация <span class="val" id="val-spawnDensity">8</span></label>
+        <input type="range" id="spawnDensity" min="1" max="20" value="8">
+        
+        <label>Время жизни <span class="val" id="val-lifeSpan">70</span></label>
+        <input type="range" id="lifeSpan" min="1" max="100" step="1" value="70">
     </div>
 
     <div class="btn-row">
@@ -216,14 +216,17 @@
     let lastTime = 0, frames = 0, fps = 0;
     let mouse = { x: 0, y: 0 };
     
+    // Начальная скорость изменена на 3.5 для мощного разлета сразу
     const config = { 
         sPattern: 'circle_solid',
-        speed: 0.5, 
-        spawnDensity: 5, 
-        lifeSpan: 50, 
-        trailAlpha: 0.15, 
-        color: '#00f2ff', isRainbow: false, 
-        pSize: 5, spawnScale: 30 
+        speed: 3.5, 
+        spawnDensity: 8, 
+        lifeSpan: 70, 
+        trailAlpha: 0.05, 
+        color: '#00f2ff', 
+        isRainbow: true, 
+        pSize: 4, 
+        spawnScale: 45 
     };
 
     function resize() {
@@ -346,7 +349,6 @@
         requestAnimationFrame(animate);
     }
 
-    // Обработка ввода (Мышь + Тач)
     function handleInput(e) {
         const rect = canvas.getBoundingClientRect();
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -363,7 +365,6 @@
     canvas.addEventListener('touchmove', (e) => { handleInput(e); e.preventDefault(); }, {passive: false});
     window.addEventListener('touchend', () => isDrawing = false);
 
-    // Настройки
     document.getElementById('particleColor').oninput = (e) => config.color = e.target.value;
     document.getElementById('rainbowMode').onchange = (e) => config.isRainbow = e.target.checked;
     document.getElementById('sPattern').onchange = (e) => config.sPattern = e.target.value;

@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Pixel Lab: Aesthetic Edition (Clean)</title>
+    <style>
+        :root {
+            --bg: #050505;
+            --panel-bg: rgba(16, 16, 18, 0.85);
+            --accent: #8b5cf6;
+            --text: #e2e2e2;
+            --text-dim: #9ca3af;
+        }
+
+        body { 
+            margin: 0; 
+            background: var(--bg); 
+            color: var(--text); 
+            font-family: 'Inter', system-ui, -apple-system, sans-serif; 
+            display: flex; 
+            height: 100vh; 
+            overflow: hidden; 
+        }
+        
+        #controls { 
+            width: 300px; 
+            background: var(--panel-bg); 
+            backdrop-filter: blur(10px);
+            padding: 24px; 
+            border-right: 1px solid rgba(255,255,255,0.1); 
+            overflow-y: auto; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 20px;
+            z-index: 10;
+        }
+        
+        canvas { flex-grow: 1; cursor: crosshair; image-rendering: pixelated; }
+
+        .group { display: flex; flex-direction: column; gap: 10px; }
+        .group-title { 
+            font-size: 10px; 
+            text-transform: uppercase; 
+            letter-spacing: 0.1em; 
+            color: var(--text-dim); 
+            margin-bottom: 5px; 
+            font-weight: 600;
+        }
+        
+        label { font-size: 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .val { color: var(--accent); font-weight: 700; font-family: monospace; }
+
+        input[type="range"] { 
+            -webkit-appearance: none; width: 100%; height: 6px; 
+            background: #2d2d30; border-radius: 3px; outline: none; 
+        }
+        input[type="range"]::-webkit-slider-thumb { 
+            -webkit-appearance: none; width: 14px; height: 14px; 
+            background: var(--accent); border-radius: 50%; cursor: pointer;
+            transition: transform 0.2s;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+
+        select { 
+            background: #1a1a1e; color: white; border: 1px solid #333; 
+            padding: 8px; border-radius: 6px; width: 100%; cursor: pointer;
+        }
+        
+        input[type="color"] { width: 100%; height: 40px; border: none; background: none; cursor: pointer; border-radius: 4px; }
+
+        button { 
+            padding: 12px; border: none; border-radius: 6px; cursor: pointer; 
+            font-weight: 600; transition: 0.3s; text-transform: uppercase; font-size: 11px;
+        }
+        #clearBtn { background: #2a2a2a; color: #fff; }
+        #saveBtn { background: var(--accent); color: white; }
+        button:hover { filter: brightness(1.2); transform: translateY(-1px); }
+    </style>
+</head>
+<body>
+
+<div id="controls">
+    <div style="font-weight: 800; font-size: 18px; margin-bottom: 10px;">Pixel Lab</div>
+
+    <div class="group">
+        <div class="group-title">Цвет</div>
+        <input type="color" id="particleColor" value="#8b5cf6">
+        <label><input type="checkbox" id="rainbowMode"> Радужный режим</label>
+        <label><input type="checkbox" id="trailEnabled" checked> Включить шлейф</label>
+    </div>
+
+    <div class="group">
+        <div class="group-title">Форма и Узор</div>
+        <select id="pShape">
+            <option value="square">Квадрат</option>
+            <option value="plus">Плюс (+)</option>
+            <option value="cross">Крест (X)</option>
+        </select>
+        <select id="sPattern">
+            <option value="plus">Плюс (+)</option>
+            <option value="circle">Круг</option>
+            <option value="star">Звезда</option>
+            <option value="square_fill">Квадрат</option>
+        </select>
+    </div>
+
+    <div class="group">
+        <div class="group-title">Параметры</div>
+        <label>Размер <span class="val" id="val-pSize">6</span></label>
+        <input type="range" id="pSize" min="2" max="20" value="6">
+        
+        <label>Масштаб <span class="val" id="val-spawnScale">1</span></label>
+        <input type="range" id="spawnScale" min="0.5" max="4" step="0.5" value="1">
+        
+        <label>Шлейф <span class="val" id="val-trailAlpha">0.2</span></label>
+        <input type="range" id="trailAlpha" min="0.05" max="0.5" step="0.05" value="0.2">
+        
+        <label>Частота <span class="val" id="val-spawnDelay">2</span></label>
+        <input type="range" id="spawnDelay" min="1" max="10" value="2">
+        
+        <label>Жизнь <span class="val" id="val-lifeSpan">0.015</span></label>
+        <input type="range" id="lifeSpan" min="0.005" max="0.05" step="0.005" value="0.015">
+        
+        <label>Скорость <span class="val" id="val-speed">0.5</span></label>
+        <input type="range" id="speed" min="0" max="3" step="0.1" value="0.5">
+    </div>
+
+    <div style="margin-top: auto; display: flex; gap: 10px;">
+        <button id="clearBtn" style="flex: 1;">Сброс</button>
+        <button id="saveBtn" style="flex: 1;">Сохранить</button>
+    </div>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const GRID = 10;
+    let particles = [], isDrawing = false, frameCount = 0;
+    
+    const config = { pShape: 'square', sPattern: 'plus', speed: 0.5, spawnDelay: 2, lifeSpan: 0.015, trailAlpha: 0.2, color: '#8b5cf6', isRainbow: false, isTrailEnabled: true, pSize: 6, spawnScale: 1 };
+    
+    const patterns = {
+        plus: [{x:1,y:0}, {x:2,y:0}, {x:-1,y:0}, {x:-2,y:0}, {x:0,y:1}, {x:0,y:2}, {x:0,y:-1}, {x:0,y:-2}],
+        circle: [{x:0,y:-3}, {x:1,y:-3}, {x:-1,y:-3}, {x:2,y:-2}, {x:-2,y:-2}, {x:3,y:-1}, {x:-3,y:-1}, {x:3,y:0}, {x:-3,y:0}, {x:3,y:1}, {x:-3,y:1}, {x:2,y:2}, {x:-2,y:2}, {x:0,y:3}, {x:1,y:3}, {x:-1,y:3}],
+        star: [{x:0,y:-2}, {x:0,y:2}, {x:-2,y:0}, {x:2,y:0}, {x:1,y:1}, {x:-1,y:1}, {x:1,y:-1}, {x:-1,y:-1}],
+        square_fill: [{x:-1,y:-1}, {x:0,y:-1}, {x:1,y:-1}, {x:-1,y:0}, {x:1,y:0}, {x:-1,y:1}, {x:0,y:1}, {x:1,y:1}]
+    };
+
+    class Particle {
+        constructor(x, y, shape, vx, vy) { this.x = x; this.y = y; this.shape = shape; this.vx = vx; this.vy = vy; this.life = 1.0; this.createdAt = Date.now(); }
+        update() { this.x += this.vx; this.y += this.vy; this.life -= config.lifeSpan; }
+        draw() {
+            if (config.isRainbow) ctx.fillStyle = `hsl(${(this.createdAt / 10 + (this.x + this.y) / 5) % 360}, 80%, 60%)`;
+            else ctx.fillStyle = config.color;
+            ctx.globalAlpha = this.life;
+            const s = config.pSize, g = s;
+            if (this.shape === 'square') ctx.fillRect(this.x, this.y, s, s);
+            else if (this.shape === 'plus') { ctx.fillRect(this.x, this.y, s, s); ctx.fillRect(this.x-g, this.y, s, s); ctx.fillRect(this.x+g, this.y, s, s); ctx.fillRect(this.x, this.y-g, s, s); ctx.fillRect(this.x, this.y+g, s, s); }
+            else if (this.shape === 'cross') { ctx.fillRect(this.x-g, this.y-g, s, s); ctx.fillRect(this.x+g, this.y+g, s, s); ctx.fillRect(this.x+g, this.y-g, s, s); ctx.fillRect(this.x-g, this.y+g, s, s); }
+            ctx.globalAlpha = 1.0;
+        }
+    }
+
+    function animate() {
+        ctx.fillStyle = config.isTrailEnabled ? `rgba(5, 5, 5, ${config.trailAlpha})` : '#050505';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        frameCount++;
+        if (isDrawing && frameCount % config.spawnDelay === 0) {
+            patterns[config.sPattern].forEach(o => particles.push(new Particle(mouse.x + o.x * config.spawnScale * GRID, mouse.y + o.y * config.spawnScale * GRID, config.pShape, o.x * config.speed, o.y * config.speed)));
+        }
+        for (let i = particles.length - 1; i >= 0; i--) {
+            particles[i].update(); particles[i].draw();
+            if (particles[i].life <= 0) particles.splice(i, 1);
+        }
+        requestAnimationFrame(animate);
+    }
+
+    let mouse = { x: 0, y: 0 };
+    window.onresize = () => { canvas.width = window.innerWidth - 300; canvas.height = window.innerHeight; };
+    window.onresize();
+    
+    canvas.onmousedown = () => isDrawing = true;
+    window.onmouseup = () => isDrawing = false;
+    canvas.onmousemove = (e) => { mouse.x = e.clientX - 300; mouse.y = e.clientY; };
+
+    document.getElementById('particleColor').oninput = (e) => config.color = e.target.value;
+    document.getElementById('rainbowMode').onchange = (e) => config.isRainbow = e.target.checked;
+    document.getElementById('trailEnabled').onchange = (e) => config.isTrailEnabled = e.target.checked;
+    document.getElementById('pShape').onchange = (e) => config.pShape = e.target.value;
+    document.getElementById('sPattern').onchange = (e) => config.sPattern = e.target.value;
+    
+    ['pSize', 'spawnScale', 'trailAlpha', 'spawnDelay', 'lifeSpan', 'speed'].forEach(id => {
+        document.getElementById(id).oninput = (e) => {
+            config[id] = parseFloat(e.target.value);
+            document.getElementById('val-' + id).innerText = config[id];
+        };
+    });
+
+    document.getElementById('clearBtn').onclick = () => particles = [];
+    document.getElementById('saveBtn').onclick = () => { const link = document.createElement('a'); link.download = 'art.png'; link.href = canvas.toDataURL(); link.click(); };
+    animate();
+</script>
+</body>
+</html>
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Pixel Lab: Ultra Dense Edition</title>
+    <style>
+        :root {
+            --bg: #030303;
+            --panel-bg: rgba(18, 18, 20, 0.9);
+            --accent: #00f2ff;
+            --text: #e2e2e2;
+            --text-dim: #71717a;
+        }
+
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; display: flex; height: 100vh; overflow: hidden; }
+        
+        #controls { 
+            width: 300px; background: var(--panel-bg); backdrop-filter: blur(12px);
+            padding: 24px; border-right: 1px solid rgba(255,255,255,0.05); 
+            display: flex; flex-direction: column; gap: 18px; z-index: 10;
+        }
+        
+        canvas { flex-grow: 1; cursor: crosshair; image-rendering: pixelated; }
+
+        .group { display: flex; flex-direction: column; gap: 8px; }
+        .group-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); font-weight: 700; }
+        
+        label { font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .val { color: var(--accent); font-family: monospace; }
+
+        input[type="range"] { -webkit-appearance: none; width: 100%; height: 4px; background: #2d2d30; border-radius: 2px; outline: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: var(--accent); border-radius: 50%; cursor: pointer; }
+
+        select { background: #1a1a1e; color: white; border: 1px solid #333; padding: 8px; border-radius: 6px; width: 100%; }
+        input[type="color"] { width: 100%; height: 30px; border: none; background: none; cursor: pointer; }
+
+        .btn-row { display: flex; gap: 10px; margin-top: auto; }
+        button { flex: 1; padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 11px; transition: 0.2s; }
+        #clearBtn { background: #27272a; color: #fff; }
+        #saveBtn { background: var(--accent); color: #000; }
+        button:hover { opacity: 0.8; transform: translateY(-1px); }
+    </style>
+</head>
+<body>
+
+<div id="controls">
+    <div style="font-weight: 900; font-size: 20px; letter-spacing: -1px;">PIXEL<span style="color:var(--accent)">LAB</span></div>
+
+    <div class="group">
+        <div class="group-title">Визуал</div>
+        <input type="color" id="particleColor" value="#00f2ff">
+        <label><input type="checkbox" id="rainbowMode"> Радуга</label>
+        <label><input type="checkbox" id="trailEnabled" checked> Включить шлейф</label>
+    </div>
+
+    <div class="group">
+        <div class="group-title">Форма</div>
+        <select id="pShape">
+            <option value="square">Квадрат</option>
+            <option value="plus">Плюс</option>
+            <option value="cross">Крест</option>
+        </select>
+        <select id="sPattern">
+            <option value="plus">Плюс</option>
+            <option value="circle">Круг</option>
+            <option value="star">Звезда</option>
+            <option value="square_fill">Заполненный квадрат</option>
+        </select>
+    </div>
+
+    <div class="group">
+        <div class="group-title">Плотность и След</div>
+        <label>Размер частиц <span class="val" id="val-pSize">5</span></label>
+        <input type="range" id="pSize" min="1" max="15" value="5">
+        
+        <label>Плотность (Spawn) <span class="val" id="val-spawnDensity">3</span></label>
+        <input type="range" id="spawnDensity" min="1" max="10" value="3">
+        
+        <label>Длина хвоста <span class="val" id="val-trailAlpha">0.15</span></label>
+        <input type="range" id="trailAlpha" min="0.01" max="0.5" step="0.01" value="0.15">
+        
+        <label>Скорость разлета <span class="val" id="val-speed">1.2</span></label>
+        <input type="range" id="speed" min="0" max="4" step="0.1" value="1.2">
+
+        <label>Скорость исчезновения <span class="val" id="val-lifeSpan">0.02</span></label>
+        <input type="range" id="lifeSpan" min="0.005" max="0.1" step="0.005" value="0.02">
+    </div>
+
+    <div class="btn-row">
+        <button id="clearBtn">СБРОС</button>
+        <button id="saveBtn">PNG</button>
+    </div>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    let particles = [], isDrawing = false;
+    
+    const config = { 
+        pShape: 'square', sPattern: 'plus', speed: 1.2, 
+        spawnDensity: 3, lifeSpan: 0.02, trailAlpha: 0.15, 
+        color: '#00f2ff', isRainbow: false, isTrailEnabled: true, 
+        pSize: 5, spawnScale: 15 
+    };
+    
+    const patterns = {
+        plus: [{x:1,y:0}, {x:-1,y:0}, {x:0,y:1}, {x:0,y:-1}],
+        circle: [{x:0,y:-1}, {x:0.7,y:-0.7}, {x:1,y:0}, {x:0.7,y:0.7}, {x:0,y:1}, {x:-0.7,y:0.7}, {x:-1,y:0}, {x:-0.7,y:-0.7}],
+        star: [{x:0,y:-1.5}, {x:0,y:1.5}, {x:-1.5,y:0}, {x:1.5,y:0}, {x:0.5,y:0.5}, {x:-0.5,y:0.5}, {x:0.5,y:-0.5}, {x:-0.5,y:-0.5}],
+        square_fill: [{x:-0.5,y:-0.5}, {x:0.5,y:-0.5}, {x:-0.5,y:0.5}, {x:0.5,y:0.5}, {x:0,y:0.5}, {x:0,y:-0.5}, {x:0.5,y:0}, {x:-0.5,y:0}]
+    };
+
+    class Particle {
+        constructor(x, y, vx, vy, hue) {
+            this.x = x; this.y = y;
+            this.vx = vx; this.vy = vy;
+            this.life = 1.0;
+            this.hue = hue;
+        }
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.life -= config.lifeSpan;
+        }
+        draw() {
+            ctx.fillStyle = config.isRainbow ? `hsl(${this.hue}, 80%, 60%)` : config.color;
+            ctx.globalAlpha = Math.max(0, this.life);
+            const s = config.pSize;
+            
+            if (config.pShape === 'square') {
+                ctx.fillRect(this.x - s/2, this.y - s/2, s, s);
+            } else if (config.pShape === 'plus') {
+                ctx.fillRect(this.x - s/2, this.y - s/2, s, s);
+                ctx.fillRect(this.x - s*1.5, this.y - s/2, s, s); ctx.fillRect(this.x + s*0.5, this.y - s/2, s, s);
+                ctx.fillRect(this.x - s/2, this.y - s*1.5, s, s); ctx.fillRect(this.x - s/2, this.y + s*0.5, s, s);
+            } else if (config.pShape === 'cross') {
+                ctx.fillRect(this.x - s, this.y - s, s, s); ctx.fillRect(this.x, this.y, s, s);
+                ctx.fillRect(this.x, this.y - s, s, s); ctx.fillRect(this.x - s, this.y, s, s);
+            }
+        }
+    }
+
+    function animate() {
+        if (config.isTrailEnabled) {
+            ctx.globalAlpha = 1.0;
+            ctx.fillStyle = `rgba(3, 3, 3, ${config.trailAlpha})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        } else {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        if (isDrawing) {
+            for(let d = 0; d < config.spawnDensity; d++) {
+                patterns[config.sPattern].forEach(o => {
+                    particles.push(new Particle(
+                        mouse.x + o.x * config.spawnScale, 
+                        mouse.y + o.y * config.spawnScale, 
+                        o.x * config.speed, 
+                        o.y * config.speed,
+                        (Date.now() / 10) % 360
+                    ));
+                });
+            }
+        }
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+            particles[i].update();
+            particles[i].draw();
+            if (particles[i].life <= 0) particles.splice(i, 1);
+        }
+        requestAnimationFrame(animate);
+    }
+
+    let mouse = { x: 0, y: 0 };
+    window.onresize = () => { canvas.width = window.innerWidth - 300; canvas.height = window.innerHeight; };
+    window.onresize();
+    
+    canvas.onmousedown = () => isDrawing = true;
+    window.onmouseup = () => isDrawing = false;
+    canvas.onmousemove = (e) => { mouse.x = e.clientX - 300; mouse.y = e.clientY; };
+
+    document.getElementById('particleColor').oninput = (e) => config.color = e.target.value;
+    document.getElementById('rainbowMode').onchange = (e) => config.isRainbow = e.target.checked;
+    document.getElementById('trailEnabled').onchange = (e) => config.isTrailEnabled = e.target.checked;
+    document.getElementById('pShape').onchange = (e) => config.pShape = e.target.value;
+    document.getElementById('sPattern').onchange = (e) => config.sPattern = e.target.value;
+    
+    ['pSize', 'spawnDensity', 'trailAlpha', 'lifeSpan', 'speed'].forEach(id => {
+        document.getElementById(id).oninput = (e) => {
+            config[id] = parseFloat(e.target.value);
+            document.getElementById('val-' + id).innerText = config[id];
+        };
+    });
+
+    document.getElementById('clearBtn').onclick = () => { particles = []; ctx.clearRect(0,0,canvas.width, canvas.height); };
+    document.getElementById('saveBtn').onclick = () => {
+        const link = document.createElement('a');
+        link.download = 'pixel-art.png';
+        link.href = canvas.toDataURL();
+        link.click();
+    };
+
+    animate();
+</script>
+</body>
+</html>
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Pixel Lab: Dev Stats Edition</title>
+    <style>
+        :root {
+            --bg: #030303;
+            --panel-bg: rgba(18, 18, 20, 0.9);
+            --accent: #00f2ff;
+            --text: #e2e2e2;
+            --text-dim: #71717a;
+            --stats-bg: rgba(0, 0, 0, 0.5);
+        }
+
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Стили для статистики (HUD) */
+        #stats-overlay {
+            position: absolute;
+            top: 20px;
+            left: 320px; /* Отступ, чтобы не перекрывать панель */
+            padding: 15px;
+            background: var(--stats-bg);
+            backdrop-filter: blur(4px);
+            border-left: 2px solid var(--accent);
+            font-family: 'monospace';
+            font-size: 11px;
+            pointer-events: none;
+            z-index: 5;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .stats-item span { color: var(--accent); font-weight: bold; }
+
+        #controls { 
+            width: 300px; background: var(--panel-bg); backdrop-filter: blur(12px);
+            padding: 24px; border-right: 1px solid rgba(255,255,255,0.05); 
+            display: flex; flex-direction: column; gap: 18px; z-index: 10;
+            overflow-y: auto;
+        }
+        
+        canvas { flex-grow: 1; cursor: crosshair; image-rendering: pixelated; }
+
+        .group { display: flex; flex-direction: column; gap: 8px; }
+        .group-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); font-weight: 700; }
+        
+        label { font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .val { color: var(--accent); font-family: monospace; }
+
+        input[type="range"] { -webkit-appearance: none; width: 100%; height: 4px; background: #2d2d30; border-radius: 2px; outline: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: var(--accent); border-radius: 50%; cursor: pointer; }
+
+        select { background: #1a1a1e; color: white; border: 1px solid #333; padding: 8px; border-radius: 6px; width: 100%; }
+        input[type="color"] { width: 100%; height: 30px; border: none; background: none; cursor: pointer; }
+
+        .btn-row { display: flex; gap: 10px; margin-top: auto; }
+        button { flex: 1; padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 11px; transition: 0.2s; }
+        #clearBtn { background: #27272a; color: #fff; }
+        #saveBtn { background: var(--accent); color: #000; }
+    </style>
+</head>
+<body>
+
+<!-- Информационная панель -->
+<div id="stats-overlay">
+    <div class="stats-item">FPS: <span id="fps-val">0</span></div>
+    <div class="stats-item">Particles: <span id="count-val">0</span></div>
+    <div class="stats-item">Spawn Points: <span id="spawn-val">0</span></div>
+    <div class="stats-item">Current Scale: <span id="scale-val">0</span></div>
+    <div class="stats-item">Status: <span style="color: #4ade80;">ACTIVE</span></div>
+</div>
+
+<div id="controls">
+    <div style="font-weight: 900; font-size: 20px; letter-spacing: -1px;">PIXEL<span style="color:var(--accent)">LAB</span></div>
+
+    <div class="group">
+        <div class="group-title">Визуал</div>
+        <input type="color" id="particleColor" value="#00f2ff">
+        <label><input type="checkbox" id="rainbowMode"> Радуга</label>
+        <label><input type="checkbox" id="trailEnabled" checked> Включить шлейф</label>
+    </div>
+
+    <div class="group">
+        <div class="group-title">Форма Появления</div>
+        <select id="sPattern">
+            <option value="plus_solid">Плотный Плюс</option>
+            <option value="circle_solid">Плотный Круг</option>
+            <option value="square_outline">Контур Квадрата</option>
+        </select>
+        <select id="pShape">
+            <option value="square">Пиксель: Квадрат</option>
+            <option value="plus">Пиксель: Плюс</option>
+            <option value="cross">Пиксель: Крест</option>
+        </select>
+    </div>
+
+    <div class="group">
+        <div class="group-title">Параметры</div>
+        <label>Размер пикселя <span class="val" id="val-pSize">5</span></label>
+        <input type="range" id="pSize" min="1" max="15" value="5">
+        
+        <label>Масштаб фигуры <span class="val" id="val-spawnScale">30</span></label>
+        <input type="range" id="spawnScale" min="5" max="150" value="30">
+        
+        <label>Детализация <span class="val" id="val-spawnDensity">5</span></label>
+        <input type="range" id="spawnDensity" min="1" max="20" value="5">
+        
+        <label>Длина шлейфа <span class="val" id="val-trailAlpha">0.15</span></label>
+        <input type="range" id="trailAlpha" min="0.01" max="0.5" step="0.01" value="0.15">
+        
+        <label>Скорость разлета <span class="val" id="val-speed">0.5</span></label>
+        <input type="range" id="speed" min="0" max="4" step="0.1" value="0.5">
+
+        <label>Время жизни <span class="val" id="val-lifeSpan">0.02</span></label>
+        <input type="range" id="lifeSpan" min="0.005" max="0.1" step="0.005" value="0.02">
+    </div>
+
+    <div class="btn-row">
+        <button id="clearBtn">СБРОС</button>
+        <button id="saveBtn">PNG</button>
+    </div>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Элементы статистики
+    const fpsEl = document.getElementById('fps-val');
+    const countEl = document.getElementById('count-val');
+    const spawnEl = document.getElementById('spawn-val');
+    const scaleEl = document.getElementById('scale-val');
+
+    let particles = [], isDrawing = false;
+    let lastTime = 0, frames = 0, fps = 0;
+    
+    const config = { 
+        pShape: 'square', sPattern: 'plus_solid', speed: 0.5, 
+        spawnDensity: 5, lifeSpan: 0.02, trailAlpha: 0.15, 
+        color: '#00f2ff', isRainbow: false, isTrailEnabled: true, 
+        pSize: 5, spawnScale: 30 
+    };
+
+    function getPatternPoints() {
+        const points = [];
+        const density = config.spawnDensity;
+        const scale = config.spawnScale;
+
+        if (config.sPattern === 'plus_solid') {
+            for (let i = -density; i <= density; i++) {
+                let offset = (i / density) * scale;
+                points.push({x: offset, y: 0, vx: offset/scale, vy: 0});
+                points.push({x: 0, y: offset, vx: 0, vy: offset/scale});
+            }
+        } 
+        else if (config.sPattern === 'circle_solid') {
+            const total = density * 8; // Плотнее для круга
+            for (let i = 0; i < total; i++) {
+                let angle = (i / total) * Math.PI * 2;
+                points.push({
+                    x: Math.cos(angle) * scale, 
+                    y: Math.sin(angle) * scale,
+                    vx: Math.cos(angle), vy: Math.sin(angle)
+                });
+            }
+        }
+        else if (config.sPattern === 'square_outline') {
+            for (let i = -density; i <= density; i++) {
+                let pos = (i / density) * scale;
+                points.push({x: pos, y: -scale, vx: pos/scale, vy: -1});
+                points.push({x: pos, y: scale, vx: pos/scale, vy: 1});
+                points.push({x: -scale, y: pos, vx: -1, vy: pos/scale});
+                points.push({x: scale, y: pos, vx: 1, vy: pos/scale});
+            }
+        }
+        return points;
+    }
+
+    class Particle {
+        constructor(x, y, vx, vy, hue) {
+            this.x = x; this.y = y;
+            this.vx = vx * config.speed; 
+            this.vy = vy * config.speed;
+            this.life = 1.0;
+            this.hue = hue;
+        }
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.life -= config.lifeSpan;
+        }
+        draw() {
+            ctx.fillStyle = config.isRainbow ? `hsl(${this.hue}, 80%, 60%)` : config.color;
+            ctx.globalAlpha = Math.max(0, this.life);
+            const s = config.pSize;
+            
+            if (config.pShape === 'square') {
+                ctx.fillRect(this.x - s/2, this.y - s/2, s, s);
+            } else if (config.pShape === 'plus') {
+                ctx.fillRect(this.x - s/2, this.y - s/2, s, s);
+                ctx.fillRect(this.x - s*1.2, this.y - s/2, s, s); ctx.fillRect(this.x + s*0.2, this.y - s/2, s, s);
+                ctx.fillRect(this.x - s/2, this.y - s*1.2, s, s); ctx.fillRect(this.x - s/2, this.y + s*0.2, s, s);
+            } else if (config.pShape === 'cross') {
+                ctx.fillRect(this.x - s, this.y - s, s, s); ctx.fillRect(this.x, this.y, s, s);
+                ctx.fillRect(this.x, this.y - s, s, s); ctx.fillRect(this.x - s, this.y, s, s);
+            }
+        }
+    }
+
+    function updateStats(timestamp) {
+        frames++;
+        if (timestamp > lastTime + 1000) {
+            fps = Math.round((frames * 1000) / (timestamp - lastTime));
+            lastTime = timestamp;
+            frames = 0;
+            fpsEl.innerText = fps;
+        }
+        countEl.innerText = particles.length;
+        scaleEl.innerText = config.spawnScale;
+        
+        // Считаем сколько точек в текущем паттерне
+        const currentPoints = getPatternPoints().length;
+        spawnEl.innerText = isDrawing ? currentPoints : 0;
+    }
+
+    function animate(timestamp) {
+        updateStats(timestamp);
+
+        if (config.isTrailEnabled) {
+            ctx.globalAlpha = 1.0;
+            ctx.fillStyle = `rgba(3, 3, 3, ${config.trailAlpha})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        } else {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        if (isDrawing) {
+            const pts = getPatternPoints();
+            pts.forEach(p => {
+                particles.push(new Particle(
+                    mouse.x + p.x, 
+                    mouse.y + p.y, 
+                    p.vx, 
+                    p.vy,
+                    (Date.now() / 10) % 360
+                ));
+            });
+        }
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+            particles[i].update();
+            particles[i].draw();
+            if (particles[i].life <= 0) particles.splice(i, 1);
+        }
+        requestAnimationFrame(animate);
+    }
+
+    let mouse = { x: 0, y: 0 };
+    window.onresize = () => { canvas.width = window.innerWidth - 300; canvas.height = window.innerHeight; };
+    window.onresize();
+    
+    canvas.onmousedown = () => isDrawing = true;
+    window.onmouseup = () => isDrawing = false;
+    canvas.onmousemove = (e) => { mouse.x = e.clientX - 300; mouse.y = e.clientY; };
+
+    document.getElementById('particleColor').oninput = (e) => config.color = e.target.value;
+    document.getElementById('rainbowMode').onchange = (e) => config.isRainbow = e.target.checked;
+    document.getElementById('trailEnabled').onchange = (e) => config.isTrailEnabled = e.target.checked;
+    document.getElementById('pShape').onchange = (e) => config.pShape = e.target.value;
+    document.getElementById('sPattern').onchange = (e) => config.sPattern = e.target.value;
+    
+    ['pSize', 'spawnDensity', 'trailAlpha', 'lifeSpan', 'speed', 'spawnScale'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) {
+            el.oninput = (e) => {
+                config[id] = parseFloat(e.target.value);
+                document.getElementById('val-' + id).innerText = config[id];
+            };
+        }
+    });
+
+    document.getElementById('clearBtn').onclick = () => { particles = []; ctx.clearRect(0,0,canvas.width, canvas.height); };
+    document.getElementById('saveBtn').onclick = () => {
+        const link = document.createElement('a');
+        link.download = 'pixel-art.png';
+        link.href = canvas.toDataURL();
+        link.click();
+    };
+
+    requestAnimationFrame(animate);
+</script>
+</body>
+</html>
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Wave Engine: Silent Zen</title>
+    <style>
+        :root {
+            --bg: #000000;
+            --panel: #111111;
+            --border: #222222;
+            --accent: #ffffff;
+            --text: #999999;
+            --text-active: #ffffff;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { 
+            margin: 0; background: var(--bg); color: var(--text); 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; 
+            display: flex; height: 100vh; overflow: hidden;
+        }
+
+        #controls { 
+            width: 260px; background: var(--panel); border-right: 1px solid var(--border);
+            display: flex; flex-direction: column; z-index: 10; flex-shrink: 0;
+            overflow-y: auto; padding: 20px; gap: 15px;
+        }
+
+        #canvas-container { position: relative; flex-grow: 1; background: #000; }
+        canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+
+        #stats {
+            position: absolute; top: 15px; right: 15px;
+            font-family: monospace; font-size: 10px; color: var(--text);
+            pointer-events: none; text-align: right;
+        }
+
+        .title { font-weight: 700; color: var(--text-active); font-size: 14px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px; }
+        .group { display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 15px; }
+        label { font-size: 11px; display: flex; justify-content: space-between; margin-bottom: 2px; }
+        .val { color: var(--accent); font-family: monospace; }
+
+        input[type="range"] { -webkit-appearance: none; width: 100%; height: 2px; background: var(--border); outline: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; background: var(--accent); cursor: pointer; }
+        
+        select { background: #000; color: #fff; border: 1px solid var(--border); padding: 8px; font-size: 12px; outline: none; width: 100%; }
+        input[type="color"] { width: 100%; height: 25px; border: 1px solid var(--border); background: none; cursor: pointer; padding: 0; }
+        
+        .row { display: flex; gap: 5px; margin-top: 5px; }
+        button { 
+            flex: 1; padding: 10px; border: 1px solid var(--border); background: #000; 
+            color: #fff; cursor: pointer; font-size: 10px; text-transform: uppercase;
+        }
+        button:hover { background: #222; }
+
+        @media (max-width: 700px) {
+            body { flex-direction: column; }
+            #controls { width: 100%; height: 40%; border-right: none; border-top: 1px solid var(--border); order: 2; }
+            #canvas-container { order: 1; flex-grow: 1; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="controls">
+    <div class="title">Wave Engine</div>
+
+    <div class="group">
+        <label>Shape</label>
+        <select id="shape-select">
+            <option value="circle">Circles</option>
+            <option value="square">Squares</option>
+        </select>
+    </div>
+
+    <div class="group">
+        <label>Wave Speed <span class="val" id="v-waveSpeed">12</span></label>
+        <input type="range" id="waveSpeed" min="2" max="30" value="12">
+
+        <label>Wave Thickness <span class="val" id="v-triggerRadius">180</span></label>
+        <input type="range" id="triggerRadius" min="40" max="500" value="180">
+
+        <label>Max Growth <span class="val" id="v-maxGrowth">40</span></label>
+        <input type="range" id="maxGrowth" min="5" max="100" value="40">
+        
+        <label>Fade Sharpness <span class="val" id="v-sharpness">0.12</span></label>
+        <input type="range" id="sharpness" min="0.01" max="1.0" step="0.01" value="0.12">
+    </div>
+
+    <div class="group">
+        <label>Base Color</label>
+        <input type="color" id="baseColor" value="#151515">
+        <label>Wave Color</label>
+        <input type="color" id="activeColor" value="#ffffff">
+        <label style="color: var(--text-active); margin-top: 5px;">
+            <input type="checkbox" id="isRainbow"> Rainbow Mode
+        </label>
+    </div>
+
+    <div class="row">
+        <button id="resetBtn">Clear All</button>
+        <button id="saveBtn">Save Shot</button>
+    </div>
+</div>
+
+<div id="canvas-container">
+    <div id="stats">FPS: 0</div>
+    <canvas id="canvas"></canvas>
+</div>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    const container = document.getElementById('canvas-container');
+    const statsEl = document.getElementById('stats');
+
+    let circles = [], ripples = [];
+    let width, height, lastTime = 0, frames = 0;
+
+    const conf = {
+        spacing: 30, baseRadius: 2, maxGrowth: 40, triggerRadius: 180,
+        sharpness: 0.12, waveSpeed: 12, baseColor: '#151515', activeColor: '#ffffff',
+        isRainbow: false, shape: 'circle'
+    };
+
+    const hexToRgb = hex => {
+        const i = parseInt(hex.slice(1), 16);
+        return { r: (i >> 16) & 255, g: (i >> 8) & 255, b: i & 255 };
+    };
+
+    function resize() {
+        width = canvas.width = container.offsetWidth;
+        height = canvas.height = container.offsetHeight;
+        circles = [];
+        for (let x = 0; x <= width + conf.spacing; x += conf.spacing) {
+            for (let y = 0; y <= height + conf.spacing; y += conf.spacing) {
+                circles.push({ x, y, r: conf.baseRadius });
+            }
+        }
+    }
+
+    function animate(t) {
+        frames++;
+        if (t > lastTime + 1000) {
+            statsEl.innerText = `FPS: ${Math.round(frames * 1000 / (t - lastTime))}`;
+            lastTime = t; frames = 0;
+        }
+
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, width, height);
+
+        const bC = hexToRgb(conf.baseColor);
+        const aC = hexToRgb(conf.activeColor);
+
+        // Update ripples
+        for (let i = ripples.length - 1; i >= 0; i--) {
+            ripples[i].radius += conf.waveSpeed; 
+            ripples[i].power *= 0.985;
+            if (ripples[i].power < 0.01) ripples.splice(i, 1);
+        }
+
+        for (let i = 0; i < circles.length; i++) {
+            const c = circles[i];
+            let influence = 0;
+
+            for (let j = 0; j < ripples.length; j++) {
+                const r = ripples[j];
+                const d = Math.sqrt((r.x - c.x)**2 + (r.y - c.y)**2);
+                const diff = Math.abs(d - r.radius);
+                if (diff < conf.triggerRadius / 2) {
+                    influence = Math.max(influence, (1 - diff / (conf.triggerRadius / 2)) * r.power);
+                }
+            }
+
+            if (conf.isRainbow) {
+                ctx.fillStyle = `hsl(${(t/40 + influence*80)%360}, 70%, ${20 + influence*60}%)`;
+            } else {
+                const r = (bC.r + (aC.r - bC.r) * influence) | 0;
+                const g = (bC.g + (aC.g - bC.g) * influence) | 0;
+                const b = (bC.b + (aC.b - bC.b) * influence) | 0;
+                ctx.fillStyle = `rgb(${r},${g},${b})`;
+            }
+
+            let targetR = conf.baseRadius + (conf.maxGrowth * influence);
+            c.r += (targetR - c.r) * conf.sharpness;
+
+            if (c.r > 0.1) {
+                if (conf.shape === 'circle') {
+                    ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, 6.28); ctx.fill();
+                } else {
+                    ctx.fillRect(c.x - c.r, c.y - c.r, c.r * 2, c.r * 2);
+                }
+            }
+        }
+        requestAnimationFrame(animate);
+    }
+
+    const createWave = e => {
+        const r = canvas.getBoundingClientRect();
+        const ev = e.touches ? e.touches[0] : e;
+        const x = ev.clientX - r.left;
+        const y = ev.clientY - r.top;
+        ripples.push({ x, y, radius: 0, power: 1 });
+    };
+
+    canvas.addEventListener('mousedown', createWave);
+    canvas.addEventListener('touchstart', e => { createWave(e); e.preventDefault(); }, {passive: false});
+
+    ['waveSpeed', 'triggerRadius', 'maxGrowth', 'sharpness', 'baseColor', 'activeColor'].forEach(id => {
+        document.getElementById(id).oninput = e => {
+            conf[id] = id.includes('Color') ? e.target.value : parseFloat(e.target.value);
+            document.getElementById('v-' + id).innerText = e.target.value;
+        };
+    });
+
+    document.getElementById('shape-select').onchange = e => conf.shape = e.target.value;
+    document.getElementById('isRainbow').onchange = e => conf.isRainbow = e.target.checked;
+    document.getElementById('resetBtn').onclick = () => ripples = [];
+    document.getElementById('saveBtn').onclick = () => {
+        const a = document.createElement('a'); a.download = 'silent-wave.png';
+        a.href = canvas.toDataURL(); a.click();
+    };
+
+    window.addEventListener('resize', resize);
+    resize(); requestAnimationFrame(animate);
+</script>
+</body>
+</html>
+
+
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pixel Lab: Always Smooth</title>
+    <style>
+        :root {
+            --bg: #030303;
+            --panel-bg: rgba(18, 18, 20, 0.9);
+            --accent: #00f2ff;
+            --text: #e2e2e2;
+            --text-dim: #71717a;
+            --stats-bg: rgba(0, 0, 0, 0.8);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body { 
+            margin: 0; 
+            background: var(--bg); 
+            color: var(--text); 
+            font-family: 'Inter', sans-serif; 
+            display: flex; 
+            height: 100vh; 
+            overflow: hidden;
+        }
+
+        @media (max-width: 768px) {
+            body { flex-direction: column; }
+            #controls { 
+                width: 100% !important; 
+                height: 40% !important; 
+                border-right: none !important; 
+                border-top: 1px solid rgba(255,255,255,0.05); 
+                order: 2;
+            }
+            #canvas-container { order: 1; flex-grow: 1; }
+            #stats-overlay, #show-stats-btn { left: 10px !important; }
+        }
+
+        #stats-overlay {
+            position: absolute;
+            top: 20px;
+            left: 320px;
+            padding: 30px 15px 15px 15px; 
+            background: var(--stats-bg);
+            backdrop-filter: blur(8px);
+            border-left: 2px solid var(--accent);
+            font-family: 'monospace';
+            font-size: 11px;
+            z-index: 5;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+        }
+
+        #stats-overlay.hidden {
+            opacity: 0;
+            transform: translateX(-20px);
+            pointer-events: none;
+        }
+
+        .toggle-hud-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-dim);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 0;
+            transition: 0.2s;
+        }
+
+        .toggle-hud-btn:hover { background: #ff4d4d; color: white; border-color: #ff4d4d; }
+
+        #show-stats-btn {
+            position: absolute;
+            top: 20px;
+            left: 320px;
+            width: 35px;
+            height: 35px;
+            background: var(--panel-bg);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            border-radius: 4px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            z-index: 4;
+        }
+
+        #controls { 
+            width: 300px; 
+            background: var(--panel-bg); 
+            backdrop-filter: blur(12px);
+            padding: 24px; 
+            border-right: 1px solid rgba(255,255,255,0.05); 
+            display: flex; 
+            flex-direction: column; 
+            gap: 15px; 
+            z-index: 10;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+        
+        #canvas-container { position: relative; flex-grow: 1; overflow: hidden; touch-action: none; }
+        canvas { width: 100%; height: 100%; display: block; cursor: crosshair; image-rendering: pixelated; }
+
+        .group { display: flex; flex-direction: column; gap: 8px; }
+        .group-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); font-weight: 700; }
+        label { font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .val { color: var(--accent); font-family: monospace; }
+        input[type="range"] { -webkit-appearance: none; width: 100%; height: 4px; background: #2d2d30; border-radius: 2px; outline: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: var(--accent); border-radius: 50%; cursor: pointer; }
+        select { background: #1a1a1e; color: white; border: 1px solid #333; padding: 8px; border-radius: 6px; width: 100%; font-size: 14px; }
+        input[type="color"] { width: 100%; height: 30px; border: none; background: none; cursor: pointer; }
+        .btn-row { display: flex; gap: 10px; margin-top: auto; padding-top: 10px; }
+        button { flex: 1; padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 11px; transition: 0.2s; }
+        #clearBtn { background: #27272a; color: #fff; }
+        #saveBtn { background: var(--accent); color: #000; }
+    </style>
+</head>
+<body>
+
+<button id="show-stats-btn" title="Показать информацию">i</button>
+
+<div id="stats-overlay">
+    <button class="toggle-hud-btn" id="hide-stats-btn">✕</button>
+    <div class="stats-item">FPS: <span id="fps-val">0</span></div>
+    <div class="stats-item">Particles: <span id="count-val">0</span></div>
+    <div class="stats-item">Spawn Points: <span id="spawn-val">0</span></div>
+    <div class="stats-item">Scale: <span id="scale-val">0</span></div>
+    <div class="stats-item">Status: <span style="color: #4ade80;">ACTIVE</span></div>
+</div>
+
+<div id="controls">
+    <div style="font-weight: 900; font-size: 20px; letter-spacing: -1px;">PIXEL<span style="color:var(--accent)">LAB</span></div>
+
+    <!-- Перемещено выше для интереса -->
+    <div class="group">
+        <div class="group-title">Визуал</div>
+        <label><input type="checkbox" id="rainbowMode" checked> Эффект Радуги</label>
+        <input type="color" id="particleColor" value="#00f2ff">
+    </div>
+
+    <div class="group">
+        <div class="group-title">Геометрия</div>
+        <select id="sPattern">
+            <option value="circle_solid">Круг</option>
+            <option value="square_outline">Квадрат</option>
+            <option value="plus_solid">Плюс</option>
+        </select>
+    </div>
+
+    <div class="group">
+        <div class="group-title">Параметры</div>
+        <label>Длина шлейфа <span class="val" id="val-trailAlpha">0.05</span></label>
+        <input type="range" id="trailAlpha" min="0.01" max="0.5" step="0.01" value="0.05">
+
+        <label>Скорость <span class="val" id="val-speed">1.2</span></label>
+        <input type="range" id="speed" min="0" max="4" step="0.1" value="1.2">
+
+        <label>Размер пикселя <span class="val" id="val-pSize">4</span></label>
+        <input type="range" id="pSize" min="1" max="15" value="4">
+        
+        <label>Масштаб <span class="val" id="val-spawnScale">45</span></label>
+        <input type="range" id="spawnScale" min="5" max="150" value="45">
+        
+        <label>Детализация <span class="val" id="val-spawnDensity">8</span></label>
+        <input type="range" id="spawnDensity" min="1" max="20" value="8">
+        
+        <label>Время жизни <span class="val" id="val-lifeSpan">70</span></label>
+        <input type="range" id="lifeSpan" min="1" max="100" step="1" value="70">
+    </div>
+
+    <div class="btn-row">
+        <button id="clearBtn">СБРОС</button>
+        <button id="saveBtn">PNG</button>
+    </div>
+</div>
+
+<div id="canvas-container">
+    <canvas id="canvas"></canvas>
+</div>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('canvas-container');
+    
+    const statsOverlay = document.getElementById('stats-overlay');
+    const hideBtn = document.getElementById('hide-stats-btn');
+    const showBtn = document.getElementById('show-stats-btn');
+
+    const fpsEl = document.getElementById('fps-val');
+    const countEl = document.getElementById('count-val');
+    const spawnEl = document.getElementById('spawn-val');
+    const scaleEl = document.getElementById('scale-val');
+
+    let particles = [], isDrawing = false;
+    let lastTime = 0, frames = 0, fps = 0;
+    let mouse = { x: 0, y: 0 };
+    
+    // Начальные настройки изменены для ВАУ-эффекта
+    const config = { 
+        sPattern: 'circle_solid',
+        speed: 1.2, 
+        spawnDensity: 8, 
+        lifeSpan: 70, 
+        trailAlpha: 0.05, 
+        color: '#00f2ff', 
+        isRainbow: true, 
+        pSize: 4, 
+        spawnScale: 45 
+    };
+
+    function resize() {
+        const rect = container.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+
+    hideBtn.onclick = () => {
+        statsOverlay.classList.add('hidden');
+        showBtn.style.display = 'flex';
+    };
+
+    showBtn.onclick = () => {
+        statsOverlay.classList.remove('hidden');
+        showBtn.style.display = 'none';
+    };
+
+    function getPatternPoints() {
+        const points = [];
+        const density = config.spawnDensity;
+        const scale = config.spawnScale;
+
+        if (config.sPattern === 'plus_solid') {
+            for (let i = -density; i <= density; i++) {
+                let offset = (i / density) * scale;
+                points.push({x: offset, y: 0, vx: offset/scale, vy: 0});
+                points.push({x: 0, y: offset, vx: 0, vy: offset/scale});
+            }
+        } 
+        else if (config.sPattern === 'circle_solid') {
+            const total = density * 8; 
+            for (let i = 0; i < total; i++) {
+                let angle = (i / total) * Math.PI * 2;
+                points.push({
+                    x: Math.cos(angle) * scale, 
+                    y: Math.sin(angle) * scale,
+                    vx: Math.cos(angle), vy: Math.sin(angle)
+                });
+            }
+        }
+        else if (config.sPattern === 'square_outline') {
+            for (let i = -density; i <= density; i++) {
+                let pos = (i / density) * scale;
+                points.push({x: pos, y: -scale, vx: pos/scale, vy: -1});
+                points.push({x: pos, y: scale, vx: pos/scale, vy: 1});
+                points.push({x: -scale, y: pos, vx: -1, vy: pos/scale});
+                points.push({x: scale, y: pos, vx: 1, vy: pos/scale});
+            }
+        }
+        return points;
+    }
+
+    class Particle {
+        constructor(x, y, vx, vy, hue) {
+            this.x = x; this.y = y;
+            this.vx = vx * config.speed; 
+            this.vy = vy * config.speed;
+            this.life = 1.0;
+            this.hue = hue;
+            this.decay = 0.11 - (config.lifeSpan / 1000);
+        }
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.life -= this.decay;
+        }
+        draw() {
+            ctx.fillStyle = config.isRainbow ? `hsl(${this.hue}, 80%, 60%)` : config.color;
+            ctx.globalAlpha = Math.max(0, this.life);
+            const s = config.pSize;
+            ctx.fillRect(this.x - s/2, this.y - s/2, s, s);
+        }
+    }
+
+    function updateStats(timestamp) {
+        frames++;
+        if (timestamp > lastTime + 1000) {
+            fps = Math.round((frames * 1000) / (timestamp - lastTime));
+            lastTime = timestamp;
+            frames = 0;
+            if (!statsOverlay.classList.contains('hidden')) fpsEl.innerText = fps;
+        }
+        if (!statsOverlay.classList.contains('hidden')) {
+            countEl.innerText = particles.length;
+            scaleEl.innerText = config.spawnScale;
+            spawnEl.innerText = isDrawing ? getPatternPoints().length : 0;
+        }
+    }
+
+    function animate(timestamp) {
+        updateStats(timestamp);
+
+        ctx.globalAlpha = 1.0;
+        const fillOpacity = 0.51 - config.trailAlpha;
+        ctx.fillStyle = `rgba(3, 3, 3, ${fillOpacity})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        if (isDrawing) {
+            const pts = getPatternPoints();
+            pts.forEach(p => {
+                particles.push(new Particle(
+                    mouse.x + p.x, 
+                    mouse.y + p.y, 
+                    p.vx, 
+                    p.vy,
+                    (Date.now() / 10) % 360
+                ));
+            });
+        }
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+            particles[i].update();
+            particles[i].draw();
+            if (particles[i].life <= 0) particles.splice(i, 1);
+        }
+        requestAnimationFrame(animate);
+    }
+
+    function handleInput(e) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        mouse.x = clientX - rect.left;
+        mouse.y = clientY - rect.top;
+    }
+
+    canvas.addEventListener('mousedown', (e) => { isDrawing = true; handleInput(e); });
+    canvas.addEventListener('mousemove', handleInput);
+    window.addEventListener('mouseup', () => isDrawing = false);
+
+    canvas.addEventListener('touchstart', (e) => { isDrawing = true; handleInput(e); e.preventDefault(); }, {passive: false});
+    canvas.addEventListener('touchmove', (e) => { handleInput(e); e.preventDefault(); }, {passive: false});
+    window.addEventListener('touchend', () => isDrawing = false);
+
+    document.getElementById('particleColor').oninput = (e) => config.color = e.target.value;
+    document.getElementById('rainbowMode').onchange = (e) => config.isRainbow = e.target.checked;
+    document.getElementById('sPattern').onchange = (e) => config.sPattern = e.target.value;
+    
+    ['pSize', 'spawnDensity', 'trailAlpha', 'lifeSpan', 'speed', 'spawnScale'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) {
+            el.oninput = (e) => {
+                config[id] = parseFloat(e.target.value);
+                document.getElementById('val-' + id).innerText = config[id];
+            };
+        }
+    });
+
+    document.getElementById('clearBtn').onclick = () => { particles = []; ctx.clearRect(0,0,canvas.width, canvas.height); };
+    document.getElementById('saveBtn').onclick = () => {
+        const link = document.createElement('a');
+        link.download = 'pixel-art.png';
+        link.href = canvas.toDataURL();
+        link.click();
+    };
+
+    requestAnimationFrame(animate);
+</script>
+</body>
+</html>
